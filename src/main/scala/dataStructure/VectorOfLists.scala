@@ -7,13 +7,10 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 class VectorOfLists[T: Ordering](capacity: Int) extends Serializable {
 
   private var lists: ArrayBuffer[Node[T]] = ArrayBuffer(Node[T]())
-  private var listCapacity: Int = if (capacity <= 0) 1 else capacity
-  private var vectorSize: Int = 1
-  private var size: Int = 0
+  var listCapacity: Int = if (capacity <= 0) 1 else capacity
+  var vectorSize: Int = 1
+  var size: Int = 0
 
-  def getSize: Int = size
-
-  def getVectorSize: Int = vectorSize
 
   def getCapacity: Int = capacity
 
@@ -25,7 +22,7 @@ class VectorOfLists[T: Ordering](capacity: Int) extends Serializable {
 
     var n = 0
     while (n < vectorSize) {
-      val maxSize = math.pow(2, n + 1).toInt - 1 * listCapacity
+      val maxSize = (math.pow(2, n + 1).toInt - 1) * listCapacity
       if (maxSize > itemIndex)
         return n
       n += 1
@@ -93,96 +90,45 @@ class VectorOfLists[T: Ordering](capacity: Int) extends Serializable {
   }
 
   def delete(index: Int): Option[T] = {
-    val n = getIndexOfList(index)
-    val startIndex = getMaxSize(n)
-
-    val data: Option[T] = if (startIndex == index) {
-      // We need to delete the head item
-      val headData = lists(n).data
-      lists(n) = lists(n).next.getOrElse(Node(Option.empty[T]))
-      headData
+    val flattenedList = toList
+    if (index >= 0 && index < flattenedList.length) {
+      val (prefix, suffix) = flattenedList.splitAt(index)
+      val element = suffix.head
+      val updatedList = prefix ++ suffix.tail
+      rebuildStructure(updatedList)
+      Some(element)
     } else {
-      var current = lists(n)
-      val indexOfPrevious = index - 1
-      for (_ <- startIndex until indexOfPrevious) {
-        current = current.next.getOrElse(Node(Option.empty[T]))
-      }
-      val deletedData = current.next.flatMap(_.data)
-      val newNext = current.next.flatMap(_.next)
-      current = current.copy(next = newNext)
-      deletedData
-    }
-
-    // Now we need to shift left everything ahead by 1 element
-    shiftLeft(n)
-    size -= 1
-    data
-  }
-
-  private def shiftLeft(n: Int): Unit = {
-    var current: Node[T] = null
-
-    for (i <- n until vectorSize - 1) {
-      current = lists(i)
-
-      while (current.next.isDefined) {
-        current = current.next.get
-      }
-
-      current = current.copy(next = Some(lists(i + 1)))
-
-      val nextNext = current.next.get.next
-      current = current.copy(next = current.next.map(_.copy(next = None)))
-      lists(i + 1) = nextNext.getOrElse(null.asInstanceOf[Node[T]])
-    }
-
-    if (lists(vectorSize - 1) == null)
-      decreaseVectorSize()
-  }
-
-  private def decreaseVectorSize(): Unit = {
-    val newVector = lists.dropRight(1)
-    lists = newVector
-    vectorSize -= 1
-  }
-
-  private def shiftRight(n: Int): Unit = {
-    if (size == getMaxSize(vectorSize))
-      increaseVectorSize()
-
-    for (i <- (n until vectorSize - 1).reverse) {
-      var current = lists(i)
-      while (current.next.isDefined && current.next.get.next.isDefined) {
-        current = current.next.get
-      }
-
-      val remainder = current.next.getOrElse(Node[T](Option.empty[T]))
-      current = current.copy(next = None)
-      lists(i + 1) = remainder.copy(next = Some(lists(i + 1)))
+      None
     }
   }
 
-  def insert(index: Int, item: T): Unit = {
-    var newNode = Node(Some(item))
-    val n = getIndexOfList(index)
-    val startIndex = getMaxSize(n)
+  private def toList: List[T] = {
+    lists.flatMap(nodeToList).toList
+  }
 
-    if (index == startIndex) {
-      newNode = newNode.copy(next = Some(lists(n)))
+  private def nodeToList(node: Node[T]): List[T] = {
+    node.data.toList ++ node.next.map(nodeToList).getOrElse(List.empty)
+  }
 
-      lists(n) = newNode
+  private def rebuildStructure(list: Iterable[T]): Unit = {
+    // Очищаем текущую структуру
+    lists = ArrayBuffer(Node[T](Option.empty[T]))
+    vectorSize = 1
+    size = 0
+
+    // Добавляем элементы из списка в структуру
+    list.foreach(add)
+  }
+
+  def insert(index: Int, item: T): Boolean = {
+    val flattenedList = toList
+    if (index >= 0 && index <= flattenedList.length) {
+      val (prefix, suffix) = flattenedList.splitAt(index)
+      rebuildStructure(prefix ++ List(item) ++ suffix)
+      true
     } else {
-      var current = lists(n)
-      val indexOfPrevious = index - 1
-
-      for (i <- startIndex until indexOfPrevious) {
-        current = current.next.getOrElse(null.asInstanceOf[Node[T]])
-      }
-      newNode = newNode.copy(next = current.next)
-      current = current.copy(next = Some(newNode))
+      false
     }
-
-    shiftRight(n)
   }
 
   def forEach(action: Option[T] => Unit): Unit = {
@@ -198,29 +144,29 @@ class VectorOfLists[T: Ordering](capacity: Int) extends Serializable {
     }
   }
 
-
   override def toString: String = {
-    val builder = new StringBuilder("[")
-    for (i <- 0 until vectorSize) {
-      builder.append("Doubles Vector: [")
-      val currentList = lists(i)
-      var current = currentList
-      while (current != null) {
-        builder.append(current.data)
-        if (current.next != null) {
-          builder.append(", ")
-        }
-        current.next match {
-          case Some(nextNode) => current = nextNode
-          case None => throw new NoSuchElementException("Next element is null")
-        }
-      }
-      builder.append("]")
-      if (i != vectorSize - 1) {
-        builder.append("\n")
+    val builder = new StringBuilder
+
+    for ((list, index) <- lists.zipWithIndex) {
+      builder.append(s"$index = ${nodeToString(list)}\n")
+    }
+    builder.toString()
+  }
+
+  private def nodeToString(node: Node[T]): String = {
+    val builder = new StringBuilder
+    var current = Option(node)
+
+    while (current.isDefined) {
+      builder.append(s"${current.get.data.getOrElse("None")}")
+
+      if (current.get.next.isDefined) {
+        builder.append(" -> ")
+        current = current.get.next
+      } else {
+        current = None
       }
     }
-    builder.append("]")
     builder.toString()
   }
 
@@ -251,94 +197,15 @@ class VectorOfLists[T: Ordering](capacity: Int) extends Serializable {
     out.flush()
   }
 
-/*  private def readObject(in: ObjectInputStream): Unit = {
-    listCapacity = in.readInt()
-    val size = in.readInt()
-    lists = new ArrayBuffer[Node[T]](1)
-    vectorSize = 1
+    private def readObject(in: ObjectInputStream): Unit = {
+      listCapacity = in.readInt()
+      val size = in.readInt()
+      lists = new ArrayBuffer[Node[T]](1)
+      vectorSize = 1
 
-    for (_ <- 0 until size) {
-      add(in.readObject().asInstanceOf[T])
-    }
-  }*/
-
-  private def combineLists(): Unit = {
-    for (i <- 0 until vectorSize - 1) {
-      var current = lists(i)
-
-      while (current.next.isDefined)
-        current = current.next.getOrElse(null.asInstanceOf[Node[T]])
-
-      current = current.copy(next = Some(lists(i + 1)))
-    }
-  }
-
-  private def uncombineLists(): Unit = {
-    var current: Node[T] = null.asInstanceOf[Node[T]]
-    var max: Int = 0
-
-    for (i <- 0 until vectorSize - 1) {
-      max = Math.pow(2, i).toInt * listCapacity
-      current = lists(i)
-
-      for (_ <- 0 until max - 1)
-        current = current.next.getOrElse(null.asInstanceOf[Node[T]])
-
-      lists(i + 1) = current.next.getOrElse(null.asInstanceOf[Node[T]])
-      current = current.copy(next = None)
-    }
-  }
-
-  private def split(list: Node[T], size: Int): (Node[T], Node[T]) = {
-    if (size <= 1 || list == null)
-      (list, null)
-    else {
-      var current = list
-      for (_ <- 0 until size / 2 - 1)
-        current = current.next.getOrElse(null.asInstanceOf[Node[T]])
-
-      val secondHalf = current.next.getOrElse(null.asInstanceOf[Node[T]])
-      current = current.copy(next = None)
-      (list, secondHalf)
-    }
-  }
-
-  private def merge(first: Option[Node[T]], second: Option[Node[T]]): Option[Node[T]] = {
-    (first, second) match {
-      case (Some(f), None) => Some(f)
-      case (None, Some(s)) => Some(s)
-      case (Some(f), Some(s)) =>
-        (f.data, s.data) match {
-          case (Some(fd), Some(sd)) =>
-            if (Ordering[T].lt(fd, sd)) {
-              val mergedNext = merge(f.next, second)
-              Some(Node(Some(fd), mergedNext))
-            } else {
-              val mergedNext = merge(first, s.next)
-              Some(Node(Some(sd), mergedNext))
-            }
-          case _ => None
-        }
-      case _ => None
-    }
-  }
-
-
-  private def sortFunctional(list: Option[Node[T]]): Option[Node[T]] = {
-    list.flatMap { l =>
-      if (l.next.isEmpty) Some(l)
-      else {
-        val (first, second) = split(l, size)
-        merge(sortFunctional(Some(first)), sortFunctional(Some(second)))
+      for (_ <- 0 until size) {
+        add(in.readObject().asInstanceOf[T])
       }
     }
-  }
 
-  def sortFunctional(): Unit = {
-    if (size > 1) {
-      combineLists()
-      lists(0) = sortFunctional(Some(lists(0))).getOrElse(null.asInstanceOf[Node[T]])
-      uncombineLists()
-    }
-  }
 }

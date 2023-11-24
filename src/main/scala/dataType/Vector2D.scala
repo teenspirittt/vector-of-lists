@@ -3,11 +3,7 @@ package dataType
 import scala.math.sqrt
 
 class Vector2D(var x: Double, var y: Double) extends Comparable[Vector2D] with Serializable {
-  def getX: Double = x
-  def getY: Double = y
 
-  def setX(newX: Double): Unit = { x = newX }
-  def setY(newY: Double): Unit = { y = newY }
 
   def calculateMagnitude: Double = sqrt(x * x + y * y)
 
@@ -19,9 +15,9 @@ class Vector2D(var x: Double, var y: Double) extends Comparable[Vector2D] with S
     }
   }
 
-  def add(other: Vector2D): Vector2D = new Vector2D(x + other.getX, y + other.getY)
+  def add(other: Vector2D): Vector2D = new Vector2D(x + other.x, y + other.y)
 
-  def subtract(other: Vector2D): Vector2D = new Vector2D(x - other.getX, y - other.getY)
+  def subtract(other: Vector2D): Vector2D = new Vector2D(x - other.x, y - other.y)
 
   override def compareTo(other: Vector2D): Int = {
     val thisMagnitude = calculateMagnitude
