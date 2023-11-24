@@ -111,12 +111,10 @@ class VectorOfLists[T: Ordering](capacity: Int) extends Serializable {
   }
 
   private def rebuildStructure(list: Iterable[T]): Unit = {
-    // Очищаем текущую структуру
     lists = ArrayBuffer(Node[T](Option.empty[T]))
     vectorSize = 1
     size = 0
 
-    // Добавляем элементы из списка в структуру
     list.foreach(add)
   }
 
@@ -181,31 +179,42 @@ class VectorOfLists[T: Ordering](capacity: Int) extends Serializable {
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = {
-    out.writeInt(listCapacity)
-    out.writeInt(size)
-
-    for {
-      i <- 0 until vectorSize
-      current = lists(i)
-    } {
-      var currentNode = current
-      while (currentNode != null) {
-        out.writeObject(currentNode.data)
-        currentNode = currentNode.next.getOrElse(null.asInstanceOf[Node[T]])
-      }
-    }
-    out.flush()
+    out.defaultWriteObject()
+    out.writeObject(lists.toArray)
   }
 
-    private def readObject(in: ObjectInputStream): Unit = {
-      listCapacity = in.readInt()
-      val size = in.readInt()
-      lists = new ArrayBuffer[Node[T]](1)
-      vectorSize = 1
+  private def readObject(in: ObjectInputStream): Unit = {
+    in.defaultReadObject()
+    val array = in.readObject().asInstanceOf[Array[Node[T]]]
+    lists = ArrayBuffer(array: _*)
+    vectorSize = lists.length
+  }
 
-      for (_ <- 0 until size) {
-        add(in.readObject().asInstanceOf[T])
-      }
+  def sort(): Unit = {
+    val flattenedList = toList
+    val sortedList = mergeSort(flattenedList)
+    rebuildStructure(sortedList)
+  }
+
+  private def mergeSort(list: List[T]): List[T] = {
+    val n = list.length
+    if (n <= 1) {
+      list
+    } else {
+      val mid = n / 2
+      val (left, right) = list.splitAt(mid)
+      merge(mergeSort(left), mergeSort(right))
     }
+  }
 
+  private def merge(left: List[T], right: List[T]): List[T] = (left, right) match {
+    case (Nil, _) => right
+    case (_, Nil) => left
+    case (leftHead :: leftTail, rightHead :: rightTail) =>
+      if (implicitly[Ordering[T]].lt(leftHead, rightHead)) {
+        leftHead :: merge(leftTail, right)
+      } else {
+        rightHead :: merge(left, rightTail)
+      }
+  }
 }

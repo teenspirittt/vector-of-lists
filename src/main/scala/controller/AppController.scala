@@ -8,9 +8,12 @@ import javafx.fxml.{FXML, Initializable}
 import javafx.scene.control.{Alert, ChoiceBox, Label, TextField}
 import javafx.scene.control.Alert.AlertType
 import javafx.scene.control.TextFormatter
+import javafx.scene.control.TextFormatter.Change
+
 import java.net.URL
 import javafx.stage.FileChooser
 import javafx.stage.Stage
+import javafx.util.StringConverter
 
 import java.io.{FileInputStream, FileOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.util.ResourceBundle
@@ -79,8 +82,10 @@ class AppController extends Initializable {
     if (text.nonEmpty) {
       Try {
         val n = text.toInt
-        val random = new scala.util.Random
-        for (10 <- 0 until n) {
+        println(n, "n")
+        val random = scala.util.Random
+
+        for (_ <- 0 until n) {
           if (model.getCurrentType == DataTypes.Double)
             model.getDoublesVector.add(random.nextInt(100).toDouble)
           else
@@ -114,10 +119,11 @@ class AppController extends Initializable {
   }
 
   def sort(): Unit = {
-    if (model.getCurrentType == DataTypes.Double)
-      model.getDoublesVector.sortFunctional()
-    else
-      model.getVectors2DVector.sortFunctional()
+    if (model.getCurrentType == DataTypes.Double) {
+      model.getDoublesVector.sort
+    } else {
+      model.getVectors2DVector.sort
+    }
     updateText()
   }
 
@@ -171,16 +177,24 @@ class AppController extends Initializable {
       val fileIn = new FileInputStream(file)
       val in = new ObjectInputStream(fileIn)
       val obj = in.readObject
-      if (model.getCurrentType == DataTypes.Double) {
-        val vector = obj.asInstanceOf[VectorOfLists[Double]]
-        vector.get(0).getClass
-        model.setDoublesVector(vector)
-      } else {
-        val vector = obj.asInstanceOf[VectorOfLists[Vector2D]]
-        vector.get(0).getClass
-        model.setVectors2DVector(vector)
-      }
       in.close()
+
+      model.getCurrentType match {
+        case DataTypes.Double =>
+          obj match {
+            case vector: VectorOfLists[Double] =>
+              model.setDoublesVector(vector)
+            case _ =>
+              throw new IllegalArgumentException("Invalid vector type for Doubles")
+          }
+        case DataTypes.Vector2D =>
+          obj match {
+            case vector: VectorOfLists[Vector2D] =>
+              model.setVectors2DVector(vector)
+            case _ =>
+              throw new IllegalArgumentException("Invalid vector type for Vector2D")
+          }
+      }
       updateText()
     } match {
       case Failure(exception) =>
@@ -227,39 +241,34 @@ class AppController extends Initializable {
   }
 
   private def createDoubleTextFormatter(): TextFormatter[String] = {
-    new TextFormatter[String]((change: TextFormatter.Change) => {
-      val newText: String = change.getControl.asInstanceOf[javafx.scene.control.TextField].getText
-      if (newText.matches("-?\\d*\\.?\\d*")) {
-        change
-      } else {
-        null
-      }
-    })
-  }
+    new TextFormatter(new StringConverter[String] {
+      override def fromString(string: String): String = string
 
-  private def createVector2DTextFormatter(): TextFormatter[String] = {
-    new TextFormatter[String]((change: TextFormatter.Change) => {
-      val newText: String = change.getControl.asInstanceOf[javafx.scene.control.TextField].getText
-      if (newText.matches("-?\\d+(\\.)?(\\d+)?(,)?(-?\\d+(\\.)?(\\d+)?)?")) {
-        change
-      } else {
-        null
+      override def toString(value: String): String = {
+        if (value != null && value.matches("-?\\d*\\.?\\d*")) value else ""
       }
     })
   }
 
   private def createNumberTextFormatter(): TextFormatter[String] = {
-    new TextFormatter[String]((change: TextFormatter.Change) => {
-      val newText: String = change.getControl.asInstanceOf[javafx.scene.control.TextField].getText
-      if (newText.matches("\\d*")) {
-        change
-      } else {
-        null
+    new TextFormatter(new StringConverter[String] {
+      override def fromString(string: String): String = string
+
+      override def toString(value: String): String = {
+        if (value != null && value.matches("\\d*")) value else ""
       }
     })
   }
 
+  private def createVector2DTextFormatter(): TextFormatter[String] = {
+    new TextFormatter(new StringConverter[String] {
+      override def fromString(string: String): String = string
 
+      override def toString(value: String): String = {
+        if (value != null && value.matches("-?\\d+(\\.\\d+)?,?-?\\d+(\\.\\d+)?")) value else ""
+      }
+    })
+  }
 
   private def showErrorMessage(message: String): Unit = {
     val alert = new Alert(AlertType.INFORMATION)
